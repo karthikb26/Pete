@@ -80,12 +80,16 @@
       for (const [key, src] of Object.entries(imageSources)) {
         const img = new Image();
         img.onload = done;
+        img.onerror = done;
         img.src = src;
         images[key] = img;
       }
+
       for (const [key, src] of Object.entries(soundSources)) {
         const audio = new Audio(src);
         audio.oncanplaythrough = done;
+        audio.onerror = done;
+        audio.load();
         sounds[key] = audio;
       }
     }
