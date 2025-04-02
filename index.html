@@ -1,1 +1,218 @@
-Pixel Pete Level 1 HTML goes here...
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Pixel Pete - Level 1</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+    canvas { display: block; touch-action: none; }
+    .btn {
+      position: absolute;
+      bottom: 10px;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      font-size: 30px;
+      text-align: center;
+      line-height: 60px;
+      border-radius: 50%;
+      user-select: none;
+      z-index: 10;
+    }
+    #left { left: 10px; }
+    #right { left: 80px; }
+    #jump { right: 10px; }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="640" height="480"></canvas>
+  <div class="btn" id="left">◀</div>
+  <div class="btn" id="right">▶</div>
+  <div class="btn" id="jump">▲</div>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    let keys = { left: false, right: false, jump: false };
+    const tileSize = 32;
+
+    const level = [
+      "####################",
+      "#@.................#",
+      "#..o...............#",
+      "#..........E.......#",
+      "#..#####...........#",
+      "#..................#",
+      "#......o...........#",
+      "#..................#",
+      "#......#####.......#",
+      "#..................#",
+      "#.....o............#",
+      "#..................#",
+      "#..............E...#",
+      "#..................#",
+      "####################"
+    ];
+
+    let player = { x: 0, y: 0, vx: 0, vy: 0, w: 32, h: 32, onGround: false, lives: 3, score: 0 };
+    let enemies = [], coins = [], gameOver = false;
+
+    const images = {};
+    const sounds = {};
+
+    function loadAssets(callback) {
+      const imageSources = {
+        player: 'https://labs.phaser.io/assets/sprites/phaser-dude.png',
+        enemy: 'https://labs.phaser.io/assets/sprites/space-baddie.png',
+        tile: 'https://labs.phaser.io/assets/sprites/platform.png',
+        coin: 'https://labs.phaser.io/assets/sprites/star.png'
+      };
+      const soundSources = {
+        jump: 'https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3',
+        coin: 'https://interactive-examples.mdn.mozilla.net/media/examples/t-rex-roar.mp3',
+        death: 'https://interactive-examples.mdn.mozilla.net/media/examples/t-rex-roar.mp3'
+      };
+      let toLoad = Object.keys(imageSources).length + Object.keys(soundSources).length;
+      const done = () => { if (--toLoad === 0) callback(); };
+
+      for (const [key, src] of Object.entries(imageSources)) {
+        const img = new Image();
+        img.onload = done;
+        img.src = src;
+        images[key] = img;
+      }
+      for (const [key, src] of Object.entries(soundSources)) {
+        const audio = new Audio(src);
+        audio.oncanplaythrough = done;
+        sounds[key] = audio;
+      }
+    }
+
+    function tileAt(x, y) {
+      const col = Math.floor(x / tileSize);
+      const row = Math.floor(y / tileSize);
+      if (row < 0 || row >= level.length || col < 0 || col >= level[0].length) return "#";
+      return level[row][col];
+    }
+
+    function rectsOverlap(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function playSound(sound) {
+      try {
+        sound.currentTime = 0;
+        sound.play();
+      } catch (e) {}
+    }
+
+    function initGame() {
+      enemies = [];
+      coins = [];
+      for (let r = 0; r < level.length; r++) {
+        for (let c = 0; c < level[r].length; c++) {
+          const ch = level[r][c];
+          const x = c * tileSize;
+          const y = r * tileSize;
+          if (ch === "@") { player.x = x; player.y = y; }
+          if (ch === "E") { enemies.push({ x, y, vx: 1.5, vy: 0, w: 32, h: 32 }); }
+          if (ch === "o") { coins.push({ x, y, w: 32, h: 32 }); }
+        }
+      }
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      player.vx = keys.left ? -3 : keys.right ? 3 : 0;
+      player.vy += 0.5;
+      if (player.vy > 10) player.vy = 10;
+      player.x += player.vx;
+      if (tileAt(player.x, player.y + player.h) === "#") {
+        player.vy = 0;
+        player.onGround = true;
+      } else {
+        player.onGround = false;
+      }
+      player.y += player.vy;
+
+      if (player.y > canvas.height) {
+        player.lives--;
+        if (player.lives <= 0) gameOver = true;
+        else initGame();
+        return;
+      }
+
+      for (let i = coins.length - 1; i >= 0; i--) {
+        if (rectsOverlap(player, coins[i])) {
+          coins.splice(i, 1);
+          player.score += 10;
+          playSound(sounds.coin);
+        }
+      }
+
+      for (let enemy of enemies) {
+        enemy.x += enemy.vx;
+        if (tileAt(enemy.x, enemy.y + enemy.h) !== "#") {
+          enemy.vx *= -1;
+        }
+        if (rectsOverlap(player, enemy)) {
+          player.lives--;
+          playSound(sounds.death);
+          if (player.lives <= 0) gameOver = true;
+          else initGame();
+          return;
+        }
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let r = 0; r < level.length; r++) {
+        for (let c = 0; c < level[r].length; c++) {
+          if (level[r][c] === "#") {
+            ctx.drawImage(images.tile, c * tileSize, r * tileSize, tileSize, tileSize);
+          }
+        }
+      }
+      for (let coin of coins) {
+        ctx.drawImage(images.coin, coin.x, coin.y, tileSize, tileSize);
+      }
+      for (let enemy of enemies) {
+        ctx.drawImage(images.enemy, enemy.x, enemy.y, tileSize, tileSize);
+      }
+      ctx.drawImage(images.player, player.x, player.y, tileSize, tileSize);
+      ctx.fillStyle = "#fff";
+      ctx.font = "16px Arial";
+      ctx.fillText("Score: " + player.score, 10, 20);
+      ctx.fillText("Lives: " + player.lives, 560, 20);
+      if (gameOver) ctx.fillText("Game Over", 280, 240);
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.getElementById("left").ontouchstart = () => keys.left = true;
+    document.getElementById("left").ontouchend = () => keys.left = false;
+    document.getElementById("right").ontouchstart = () => keys.right = true;
+    document.getElementById("right").ontouchend = () => keys.right = false;
+    document.getElementById("jump").ontouchstart = () => {
+      if (player.onGround) {
+        player.vy = -10;
+        player.onGround = false;
+        playSound(sounds.jump);
+      }
+    };
+
+    loadAssets(() => {
+      initGame();
+      gameLoop();
+    });
+  </script>
+</body>
+</html>
